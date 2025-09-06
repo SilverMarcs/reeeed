@@ -2,11 +2,9 @@ import SwiftUI
 
 public struct ReeeederView: View {
     var url: URL
-    var onLinkClicked: ((URL) -> Void)?
     
-    public init(url: URL, onLinkClicked: ((URL) -> Void)? = nil) {
+    public init(url: URL) {
         self.url = url
-        self.onLinkClicked = onLinkClicked
     }
     
     enum Status: Equatable {
@@ -62,7 +60,7 @@ public struct ReeeederView: View {
             case .failedToExtractContent:
                 FallBackWebView(url: url)
             case .extractedContent(let readableDoc):
-                ReaderView(readableDoc: readableDoc, onLinkClicked: onLinkClicked)
+                NativeReaderView(readableDoc: readableDoc)
             }
         }
     }

@@ -46,7 +46,6 @@ struct MyView: View {
 ```
 public struct ReeeederViewOptions {
     public var theme: ReaderTheme // Change the Reader Mode appearance
-    public var onLinkClicked: ((URL) -> Void)?
 }
 ```
 

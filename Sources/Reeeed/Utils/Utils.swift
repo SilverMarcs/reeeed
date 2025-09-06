@@ -2,30 +2,13 @@ import Foundation
 import SwiftUI
 import Fuzi
 
-extension HTMLDocument {
-    // Work around iOS 18 crash when doing HTMLDocument(string: ...) directly
-    // Seems to be fine if you convert the string to data first
-    public convenience init(stringSAFE: String) throws {
-        try self.init(data: Data(stringSAFE.utf8))
-    }
-}
-
 
 extension String {
     var asJSString: String {
         let data = try! JSONSerialization.data(withJSONObject: self, options: .fragmentsAllowed)
         return String(data: data, encoding: .utf8)!
     }
-
-    var byStrippingSiteNameFromPageTitle: String {
-        for separator in [" | ", " – ", " — ", " - "] {
-            if self.contains(separator), let firstComponent = components(separatedBy: separator).first, firstComponent != "" {
-                return firstComponent.byStrippingSiteNameFromPageTitle
-            }
-        }
-        return self
-    }
-
+    
     var nilIfEmpty: String? {
         return isEmpty ? nil : self
     }
@@ -45,15 +28,58 @@ extension URL {
     }
 }
 
-extension View {
-    func onAppearOrChange<T: Equatable>(_ value: T, perform: @escaping (T) -> Void) -> some View {
-        self.onAppear(perform: { perform(value) }).onChange(of: value, perform: perform)
+
+extension Fuzi.XMLElement {
+    func traverse(_ block: (Fuzi.XMLElement) -> Void) throws {
+        for child in children {
+            block(child)
+            try child.traverse(block)
+        }
+    }
+    var estLineCount: Int {
+        if let tag = self.tag?.lowercased() {
+            switch tag {
+            case "video", "embed": return 5
+            case "h1", "h2", "h3", "h4", "h5", "h6", "p", "li":
+                return Int(ceil(Double(stringValue.count) / 60)) + 1
+            case "tr": return 1
+            default: return 0
+            }
+        }
+        return 0
     }
 }
 
-func assertNotOnMainThread() {
-    #if DEBUG
-    assert(!Thread.isMainThread)
-    #endif
+func estimateLinesUntilFirstImage(html: String) throws -> Int? {
+    let doc = try HTMLDocument(string: html)
+    var lines = 0
+    var linesBeforeFirst: Int?
+    
+    func traverseElement(_ element: XMLElement) {
+        if element.tag?.lowercased() == "img", linesBeforeFirst == nil {
+            linesBeforeFirst = lines
+        }
+        lines += element.estLineCount
+        
+        for child in element.children {
+            traverseElement(child)
+        }
+    }
+    
+    if let root = doc.root {
+        traverseElement(root)
+    }
+    
+    return linesBeforeFirst
 }
 
+
+
+extension DateFormatter {
+    static let shortDateOnly: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter
+    }()
+}
