@@ -17,34 +17,18 @@ struct PrintLogger: Logger {
 public enum Reeeed {
     public static var logger: Logger = PrintLogger()
 
-    public static func warmup(extractor: Extractor = .mercury) {
-        switch extractor {
-        case .mercury:
-            MercuryExtractor.shared.warmUp()
-        case .readability:
-            ReadabilityExtractor.shared.warmUp()
-        }
+    public static func warmup() {
+        MercuryExtractor.shared.warmUp()
     }
 
-    public static func extractArticleContent(url: URL, html: String, extractor: Extractor = .mercury) async throws -> ExtractedContent {
+    public static func extractArticleContent(url: URL, html: String) async throws -> ExtractedContent {
         return try await withCheckedThrowingContinuation({ continuation in
             DispatchQueue.main.async {
-                switch extractor {
-                case .mercury:
-                    MercuryExtractor.shared.extract(html: html, url: url) { contentOpt in
-                        if let content = contentOpt {
-                            continuation.resume(returning: content)
-                        } else {
-                            continuation.resume(throwing: ExtractionError.FailedToExtract)
-                        }
-                    }
-                case .readability:
-                    ReadabilityExtractor.shared.extract(html: html, url: url) { contentOpt in
-                        if let content = contentOpt {
-                            continuation.resume(returning: content)
-                        } else {
-                            continuation.resume(throwing: ExtractionError.FailedToExtract)
-                        }
+                MercuryExtractor.shared.extract(html: html, url: url) { contentOpt in
+                    if let content = contentOpt {
+                        continuation.resume(returning: content)
+                    } else {
+                        continuation.resume(throwing: ExtractionError.FailedToExtract)
                     }
                 }
             }
@@ -62,7 +46,7 @@ public enum Reeeed {
         }
     }
 
-    public static func fetchAndExtractContent(fromURL url: URL, extractor: Extractor = .mercury) async throws -> ReadableDoc {
+    public static func fetchAndExtractContent(fromURL url: URL) async throws -> ReadableDoc {
         DispatchQueue.main.async { Reeeed.warmup() }
         
         let (data, response) = try await URLSession.shared.data(from: url)

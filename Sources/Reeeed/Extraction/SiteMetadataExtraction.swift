@@ -1,5 +1,4 @@
 import Foundation
-import SwiftSoup
 import Fuzi
 
 public struct SiteMetadata: Equatable, Codable {
@@ -23,7 +22,7 @@ public struct SiteMetadata: Equatable, Codable {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.metadataExtractorQueue.async {
                 do {
-                    let doc = try HTMLDocument(stringSAFE: html)
+                    let doc = try HTMLDocument(string: html)
                     var md = SiteMetadata(url: baseURL)
                     md.title = (doc.ogTitle ?? doc.title)?.trimmingCharacters(in: .whitespacesAndNewlines)
                     md.heroImage = doc.ogImage(baseURL: baseURL)
@@ -44,12 +43,20 @@ private extension DispatchQueue {
 
 private extension Fuzi.HTMLDocument {
     private func getAttribute(selector: String, attribute: String) -> String? {
-        return css(selector).first?.attr(attribute, namespace: nil)
+        return css(selector).first?.attr(attribute)
     }
 
-    var metaDescription: String? { getAttribute(selector: "meta[name='description']", attribute: "content") }
+    var metaDescription: String? {
+        getAttribute(selector: "meta[name='description']", attribute: "content")
+    }
 
-    var ogTitle: String? { getAttribute(selector: "meta[property='og:title']", attribute: "content") }
+    var ogTitle: String? {
+        getAttribute(selector: "meta[property='og:title']", attribute: "content")
+    }
+
+    var title: String? {
+        return css("title").first?.stringValue
+    }
 
     func ogImage(baseURL: URL) -> URL? {
         if let link = getAttribute(selector: "meta[property='og:image']", attribute: "content") {
@@ -60,9 +67,9 @@ private extension Fuzi.HTMLDocument {
 
     func favicon(baseURL: URL) -> URL? {
         for item in css("link") {
-            if let rel = item.attr("rel", namespace: nil),
+            if let rel = item.attr("rel"),
                (rel == "icon" || rel == "shortcut icon"),
-               let val = item.attr("href", namespace: nil),
+               let val = item.attr("href"),
                let resolved = URL(string: val, relativeTo: baseURL) {
                 return resolved
             }

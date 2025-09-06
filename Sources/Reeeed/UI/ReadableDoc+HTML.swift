@@ -1,15 +1,13 @@
 import Foundation
-import SwiftSoup
 import Fuzi
-
 
 extension ReadableDoc {
     public func html(includeExitReaderButton: Bool, theme: ReaderTheme = .init()) -> String {
-        let escapedTitle = Entities.escape(title?.byStrippingSiteNameFromPageTitle ?? "")
+        let escapedTitle = htmlEscape(title?.byStrippingSiteNameFromPageTitle ?? "")
 
         var heroHTML: String = ""
         if insertHeroImage, let hero = metadata.heroImage {
-            let safeURL = Entities.escape(hero.absoluteString)
+            let safeURL = htmlEscape(hero.absoluteString)
             heroHTML = "<img class='__hero' src=\"\(safeURL)\" />"
         }
 
@@ -23,7 +21,7 @@ extension ReadableDoc {
                 }
             }
             if let author = extracted.author {
-                partsHTML.append(Entities.escape(author))
+                partsHTML.append(htmlEscape(author))
             }
             if let date {
                 appendSeparatorIfNecessary()
@@ -33,16 +31,8 @@ extension ReadableDoc {
             appendSeparatorIfNecessary()
             partsHTML.append(metadata.url.hostWithoutWWW)
 
-//            if partsHTML.count == 0 { return "" }
             return "<p class='__subtitle'>\(partsHTML.joined())</p>"
         }()
-
-        let exitReaderButton: String
-        if includeExitReaderButton {
-            exitReaderButton = "<button onClick=\"document.location = '\(URL.exitReaderModeLink.absoluteString)'\">View Normal Page</button>"
-        } else {
-            exitReaderButton = ""
-        }
 
         let wrapped = """
 <!DOCTYPE html>
@@ -59,10 +49,6 @@ extension ReadableDoc {
     <h1 id='__title'>\(escapedTitle)</h1>
         \(subtitle)
         \(extracted.content ?? "")
-    <div id="__footer">
-        <div class="label">Automatically converted to Reader Mode</div>
-        \(exitReaderButton)
-    </div>
 </div>
 
 <script>
@@ -77,12 +63,20 @@ extension ReadableDoc {
     }
 }
 
+// HTML escaping function to replace SwiftSoup's Entities.escape
+private func htmlEscape(_ string: String) -> String {
+    return string
+        .replacingOccurrences(of: "&", with: "&")
+        .replacingOccurrences(of: "<", with: "<")
+        .replacingOccurrences(of: ">", with: ">")
+        .replacingOccurrences(of: "\"", with: "")
+        .replacingOccurrences(of: "'", with: "'")
+}
+
 extension ReaderTheme {
     public var css: String {
         let (fgLight, fgDark) = foreground.hexPair
-        let (fg2Light, fg2Dark) = foreground2.hexPair
         let (bgLight, bgDark) = background.hexPair
-        let (bg2Light, bg2Dark) = background2.hexPair
         let (linkLight, linkDark) = link.hexPair
 
         return """
@@ -192,9 +186,8 @@ extension ReaderTheme {
         }
 
         #__content {
-            padding: 1.5em;
+            padding: 0.75em;
             margin: auto;
-            margin-top: 5px;
             max-width: 700px;
         }
 
@@ -206,71 +199,31 @@ extension ReaderTheme {
             a:link { color: \(linkDark); }
         }
 
-        #__footer {
-            margin-bottom: 4em;
-            margin-top: 2em;
-        }
-
-        #__footer > .label {
-            font-size: small;
-            opacity: 0.5;
-            text-align: center;
-            margin-bottom: 0.66em;
-            font-weight: 500;
-        }
-
-        #__footer > button {
-            padding: 0.5em;
-            text-align: center;
-            background-color: \(bg2Light);
-            font-weight: 500;
-            color: \(fg2Light);
-            min-height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            font-size: 1em;
-            border: none;
-            border-radius: 0.5em;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            #__footer > button {
-                background-color: \(bg2Dark);
-                color: \(fg2Dark);
-            }
-        }
-
         \(additionalCSS ?? "")
         """
     }
 }
 
-public extension URL {
-    /// If HTML is generated with `includeExitReaderButton=true`, clicking the button will navigate to this URL, which you should intercept and use to display the original website.
-    static let exitReaderModeLink = URL(string: "feeeed://exit-reader-mode")!
-}
-
-extension URL {
-    var googleFaviconURL: URL? {
-        if let host {
-            return URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=64")
-        }
-        return nil
-    }
-}
-
 func estimateLinesUntilFirstImage(html: String) throws -> Int? {
-    let doc = try HTMLDocument(data: html.data(using: .utf8)!)
+    let doc = try HTMLDocument(string: html)
     var lines = 0
     var linesBeforeFirst: Int?
-    try doc.root?.traverse { el in
-        if el.tag?.lowercased() == "img", linesBeforeFirst == nil {
+    
+    func traverseElement(_ element: XMLElement) {
+        if element.tag?.lowercased() == "img", linesBeforeFirst == nil {
             linesBeforeFirst = lines
         }
-        lines += el.estLineCount
+        lines += element.estLineCount
+        
+        for child in element.children {
+            traverseElement(child)
+        }
     }
+    
+    if let root = doc.root {
+        traverseElement(root)
+    }
+    
     return linesBeforeFirst
 }
 

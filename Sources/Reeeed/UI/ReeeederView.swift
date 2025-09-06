@@ -82,11 +82,7 @@ public struct ReeeederView: View {
     }
 
     private func onLinkClicked(_ url: URL) {
-        if url == .exitReaderModeLink {
-            showNormalPage()
-        } else {
-            options.onLinkClicked?(url)
-        }
+        options.onLinkClicked?(url)
     }
 
     private func showNormalPage() {
@@ -152,8 +148,7 @@ private struct ReaderWebView: View {
 
     private func setupLinkHandler() {
         content.shouldBlockNavigation = { action -> Bool in
-            if let url = action.request.url,
-                url == .exitReaderModeLink || action.navigationType == .linkActivated {
+            if let url = action.request.url, action.navigationType == .linkActivated {
                 onLinkClicked?(url)
                 return true
             }
