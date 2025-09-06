@@ -2,9 +2,11 @@ import SwiftUI
 
 public struct ReeeederView: View {
     var url: URL
+    var onExtractedText: ((String?) -> Void)?
     
-    public init(url: URL) {
+    public init(url: URL, onExtractedText: ((String?) -> Void)? = nil) {
         self.url = url
+        self.onExtractedText = onExtractedText
     }
     
     enum Status: Equatable {
@@ -41,8 +43,10 @@ public struct ReeeederView: View {
                 do {
                     let result = try await Reeeed.fetchAndExtractContent(fromURL: url)
                     self.status = .extractedContent(readableDoc: result)
+                    onExtractedText?(extractedText)
                 } catch {
                     status = .failedToExtractContent
+                    onExtractedText?(nil)
                 }
             }
     }
@@ -74,5 +78,12 @@ public struct ReeeederView: View {
         case .extractedContent(let readableDoc):
             return readableDoc.title ?? url.hostWithoutWWW
         }
+    }
+    
+    private var extractedText: String? {
+        if case .extractedContent(let readableDoc) = status {
+            return readableDoc.extracted.extractPlainText
+        }
+        return nil
     }
 }
