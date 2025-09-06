@@ -1,20 +1,12 @@
 import SwiftUI
-import WebKit
-
-public struct ReeeederViewOptions {
-    public var onLinkClicked: ((URL) -> Void)?
-    public init(onLinkClicked: ((URL) -> Void)? = nil) {
-        self.onLinkClicked = onLinkClicked
-    }
-}
 
 public struct ReeeederView: View {
     var url: URL
-    var options: ReeeederViewOptions
+    var onLinkClicked: ((URL) -> Void)?
     
-    public init(url: URL, options: ReeeederViewOptions = .init()) {
+    public init(url: URL, onLinkClicked: ((URL) -> Void)? = nil) {
         self.url = url
-        self.options = options
+        self.onLinkClicked = onLinkClicked
     }
     
     enum Status: Equatable {
@@ -24,12 +16,29 @@ public struct ReeeederView: View {
     }
     
     @State private var status = Status.fetching
-    @State private var titleFromFallbackWebView: String?
+    @State private var showWebView = false
+    @Environment(\.openURL) private var openURL
     
     public var body: some View {
         content
-            .navigationTitle(title ?? url.hostWithoutWWW)
+            .navigationTitle(title)
             .toolbarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button("Open in Safari") {
+                            openURL(url)
+                        }
+                    } label: {
+                        Label(
+                            showWebView ? "Show Reader" : "Show Web View",
+                            systemImage: showWebView ? "text.page" : "globe"
+                        )
+                    } primaryAction: {
+                        showWebView.toggle()
+                    }
+                }
+            }
             .task {
                 do {
                     let result = try await Reeeed.fetchAndExtractContent(fromURL: url)
@@ -42,46 +51,30 @@ public struct ReeeederView: View {
     
     @ViewBuilder
     private var content: some View {
-        switch status {
-        case .fetching:
-            ProgressView()
-                .controlSize(.extraLarge)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .failedToExtractContent:
+        if showWebView || status == .failedToExtractContent {
             FallBackWebView(url: url)
-        case .extractedContent(let readableDoc):
-            SwiftUIReaderView(readableDoc: readableDoc, onLinkClicked: onLinkClicked)
+        } else {
+            switch status {
+            case .fetching:
+                ProgressView()
+                    .controlSize(.extraLarge)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .failedToExtractContent:
+                FallBackWebView(url: url)
+            case .extractedContent(let readableDoc):
+                ReaderView(readableDoc: readableDoc, onLinkClicked: onLinkClicked)
+            }
         }
     }
     
-    private var title: String? {
+    private var title: String {
         switch status {
         case .fetching:
-            return nil
+            return "Loading"
         case .failedToExtractContent:
-            return titleFromFallbackWebView
+            return url.hostWithoutWWW
         case .extractedContent(let readableDoc):
-            return readableDoc.title
+            return readableDoc.title ?? url.hostWithoutWWW
         }
     }
-    
-    private func onLinkClicked(_ url: URL) {
-        options.onLinkClicked?(url)
-    }
 }
-
-struct FallBackWebView: View {
-    let url: URL
-    
-    @State private var page = WebPage()
-    
-    var body: some View {
-        WebView(page)
-            .navigationTitle(page.title)
-            .toolbarTitleDisplayMode(.inline)
-            .task {
-                await page.load(url)
-            }
-    }
-}
-

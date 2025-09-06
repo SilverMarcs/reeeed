@@ -18,7 +18,7 @@ struct ArticleElement {
     let type: ElementType
 }
 
-struct SwiftUIReaderView: View {
+struct ReaderView: View {
     let readableDoc: ReadableDoc
     let onLinkClicked: ((URL) -> Void)?
     
@@ -72,6 +72,7 @@ struct SwiftUIReaderView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
+        .textSelection(.enabled)
         .task {
             await parseHTML()
         }
