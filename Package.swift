@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "Reeeed",
-    platforms: [.iOS("15.0"), .macOS("12.0")],
+    platforms: [.iOS("26.0"), .macOS("26.0")],
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
         .library(
@@ -14,6 +14,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/cezheng/Fuzi", from: "3.1.3"),
+        .package(url: "https://github.com/SilverMarcs/CachedAsyncImage", branch: "main"),
         // Dependencies declare other packages that this package depends on.
         // .package(url: /* package url */, from: "1.0.0"),
     ],

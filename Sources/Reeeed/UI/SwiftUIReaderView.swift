@@ -1,0 +1,270 @@
+import SwiftUI
+import Fuzi
+import SwiftUI
+import CachedAsyncImage
+
+struct ArticleElement {
+    enum ElementType {
+        case text(String)
+        case heading(String, level: Int)
+        case paragraph(String)
+        case image(url: String, alt: String?)
+        case link(text: String, url: String)
+        case blockquote(String)
+        case code(String)
+        case list([String])
+    }
+    
+    let type: ElementType
+}
+
+struct SwiftUIReaderView: View {
+    let readableDoc: ReadableDoc
+    let onLinkClicked: ((URL) -> Void)?
+    
+    @State private var elements: [ArticleElement] = []
+    
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                if readableDoc.insertHeroImage, let heroURL = readableDoc.metadata.heroImage {
+                    CachedAsyncImage(url: heroURL, targetSize: .init(width: 600, height: 450))
+                        .aspectRatio(contentMode: .fit)
+                        .cornerRadius(8)
+                }
+                
+                if let title = readableDoc.title {
+                    Text(title)
+                        .font(.title)
+                        .fontWeight(.bold)
+                }
+                
+                HStack {
+                    if let author = readableDoc.extracted.author {
+                        Text(author)
+                    }
+                    
+                    if readableDoc.extracted.author != nil, readableDoc.date != nil {
+                        Text("·")
+                    }
+                    
+                    if let date = readableDoc.date {
+                        Text(DateFormatter.shortDateOnly.string(from: date))
+                    }
+                    
+                    if (readableDoc.extracted.author != nil || readableDoc.date != nil) {
+                        Text("·")
+                    }
+                    
+                    Text(readableDoc.metadata.url.hostWithoutWWW)
+                        
+                    
+                    Spacer()
+                }
+                .foregroundStyle(.secondary)
+                .font(.headline)
+                
+                ForEach(Array(elements.enumerated()), id: \.offset) { index, element in
+                    ElementView(element: element, onLinkClicked: onLinkClicked)
+                        .lineSpacing(5)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .task {
+            await parseHTML()
+        }
+    }
+    
+    private func parseHTML() async {
+        guard let htmlContent = readableDoc.extracted.content else {
+            return
+        }
+        
+        do {
+            let document = try HTMLDocument(string: htmlContent)
+            var parsedElements: [ArticleElement] = []
+            
+            if let body = document.body {
+                parseElement(body, into: &parsedElements)
+            }
+            
+            self.elements = parsedElements
+        } catch {
+            print("Failed to parse HTML: \(error)")
+        }
+    }
+    
+    private func parseElement(_ element: XMLElement, into elements: inout [ArticleElement]) {
+        let tagName = element.tag?.lowercased() ?? ""
+        
+        switch tagName {
+        case "h1", "h2", "h3", "h4", "h5", "h6":
+            let level = Int(tagName.dropFirst()) ?? 1
+            let text = element.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                elements.append(ArticleElement(type: .heading(text, level: level)))
+            }
+            
+        case "p":
+            let text = element.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                elements.append(ArticleElement(type: .paragraph(text)))
+            }
+            
+        case "img":
+            if let src = element["src"], !src.isEmpty {
+                let alt = element["alt"]
+                elements.append(ArticleElement(type: .image(url: src, alt: alt)))
+            }
+            
+        case "blockquote":
+            let text = element.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                elements.append(ArticleElement(type: .blockquote(text)))
+            }
+            
+        case "pre", "code":
+            let text = element.stringValue
+            if !text.isEmpty {
+                elements.append(ArticleElement(type: .code(text)))
+            }
+            
+        case "ul", "ol":
+            var listItems: [String] = []
+            for child in element.children {
+                if child.tag?.lowercased() == "li" {
+                    let text = child.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !text.isEmpty {
+                        listItems.append(text)
+                    }
+                }
+            }
+            if !listItems.isEmpty {
+                elements.append(ArticleElement(type: .list(listItems)))
+            }
+            
+        default:
+            for child in element.children {
+                parseElement(child, into: &elements)
+            }
+        }
+    }
+}
+
+struct ElementView: View {
+    let element: ArticleElement
+    let onLinkClicked: ((URL) -> Void)?
+    
+    var body: some View {
+        switch element.type {
+        case .heading(let text, let level):
+            Text(text)
+                .font(headingFont(for: level))
+                .fontWeight(.bold)
+                .lineLimit(nil)
+                .padding(.vertical, 4)
+                
+        case .paragraph(let text):
+            Text(parseAttributedText(text))
+                .padding(.vertical, 2)
+                
+        case .image(let url, let alt):
+            CachedAsyncImage(url: URL(string: url), targetSize: .init(width: 600, height: 450))
+                .aspectRatio(contentMode: .fit)
+//                .frame(maxHeight: 200)
+                .cornerRadius(5)
+                .padding(.vertical, 4)
+            
+        case .blockquote(let text):
+            HStack(alignment: .top, spacing: 12) {
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: 4)
+                
+                Text(text)
+                    .italic()
+                    .lineLimit(nil)
+            }
+            .padding(.vertical, 8)
+            
+        case .code(let text):
+            Text(text)
+                .font(.system(.body, design: .monospaced))
+                .padding(12)
+                .background(Color.gray.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(.vertical, 4)
+                
+        case .list(let items):
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•")
+                        
+                        Text(item)
+                            .lineLimit(nil)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+            
+        case .text(let text):
+            Text(text)
+
+        case .link(let text, let url):
+            Button(text) {
+                if let url = URL(string: url) {
+                    onLinkClicked?(url)
+                }
+            }
+            .foregroundStyle(.link)
+        }
+    }
+    
+    private func headingFont(for level: Int) -> Font {
+        switch level {
+        case 1: return .title
+        case 2: return .title2
+        case 3: return .title3
+        case 4: return .headline
+        case 5: return .subheadline
+        default: return .subheadline
+        }
+    }
+    
+    private func parseAttributedText(_ text: String) -> AttributedString {
+        var attributedString = AttributedString(text)
+        
+        do {
+            let linkRegex = try NSRegularExpression(pattern: "<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']*)[\"'][^>]*>([^<]*)</a>", options: [])
+            let matches = linkRegex.matches(in: text, options: [], range: NSRange(location: 0, length: text.count))
+            
+            for match in matches.reversed() {
+                if let urlRange = Range(match.range(at: 1), in: text),
+                   let textRange = Range(match.range(at: 2), in: text),
+                   let fullRange = Range(match.range, in: text) {
+                    
+                    let url = String(text[urlRange])
+                    let linkText = String(text[textRange])
+                    
+                    if let attributedRange = Range(fullRange, in: attributedString) {
+                        attributedString.removeSubrange(attributedRange)
+                        var linkAttributedString = AttributedString(linkText)
+                        linkAttributedString.foregroundColor = .accentColor
+                        linkAttributedString.underlineStyle = .single
+                        if let linkURL = URL(string: url) {
+                            linkAttributedString.link = linkURL
+                        }
+                        attributedString.insert(linkAttributedString, at: attributedRange.lowerBound)
+                    }
+                }
+            }
+        } catch {
+            print("Failed to parse links: \(error)")
+        }
+        
+        return attributedString
+    }
+}
