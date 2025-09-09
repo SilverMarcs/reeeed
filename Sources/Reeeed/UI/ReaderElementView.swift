@@ -35,11 +35,12 @@ struct ReaderElementView: View {
         case .blockquote(let text):
             HStack(alignment: .top, spacing: 12) {
                 Rectangle()
-                    .fill(Color.accentColor)
+                    .fill(.secondary)
                     .frame(width: 4)
                 
                 Text(text)
                     .italic()
+                    .foregroundStyle(.secondary)
                     .lineLimit(nil)
             }
             .padding(.vertical, 8)
