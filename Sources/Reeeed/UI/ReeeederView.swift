@@ -24,7 +24,7 @@ public struct ReeeederView: View {
             .navigationTitle(title)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Open in Safari") {
                             openURL(url)

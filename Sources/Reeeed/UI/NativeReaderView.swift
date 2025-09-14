@@ -96,7 +96,7 @@ struct NativeReaderView: View {
         }
     }
     
-    private func parseElement(_ element: XMLElement, into elements: inout [ArticleElement]) {
+    private func parseElement(_ element: Fuzi.XMLElement, into elements: inout [ArticleElement]) {
         let tagName = element.tag?.lowercased() ?? ""
         
         switch tagName {

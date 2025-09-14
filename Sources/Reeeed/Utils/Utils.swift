@@ -2,7 +2,6 @@ import Foundation
 import SwiftUI
 import Fuzi
 
-
 extension String {
     var asJSString: String {
         let data = try! JSONSerialization.data(withJSONObject: self, options: .fragmentsAllowed)
@@ -55,7 +54,7 @@ func estimateLinesUntilFirstImage(html: String) throws -> Int? {
     var lines = 0
     var linesBeforeFirst: Int?
     
-    func traverseElement(_ element: XMLElement) {
+    func traverseElement(_ element: Fuzi.XMLElement) {
         if element.tag?.lowercased() == "img", linesBeforeFirst == nil {
             linesBeforeFirst = lines
         }
