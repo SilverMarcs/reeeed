@@ -102,15 +102,17 @@ struct NativeReaderView: View {
         switch tagName {
         case "h1", "h2", "h3", "h4", "h5", "h6":
             let level = Int(tagName.dropFirst()) ?? 1
-            let text = element.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = element.rawXML.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 elements.append(ArticleElement(type: .heading(text, level: level)))
             }
             
         case "p":
-            let text = element.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty {
-                elements.append(ArticleElement(type: .paragraph(text)))
+            // Keep raw HTML so that inline elements like <a> are preserved for later parsing.
+            // Trimming outer whitespace but not stripping tags here.
+            let raw = element.rawXML.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !raw.isEmpty {
+                elements.append(ArticleElement(type: .paragraph(raw)))
             }
             
         case "img":
@@ -135,9 +137,10 @@ struct NativeReaderView: View {
             var listItems: [String] = []
             for child in element.children {
                 if child.tag?.lowercased() == "li" {
-                    let text = child.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !text.isEmpty {
-                        listItems.append(text)
+                    // Preserve raw HTML for list items to keep inline anchors.
+                    let raw = child.rawXML.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !raw.isEmpty {
+                        listItems.append(raw)
                     }
                 }
             }

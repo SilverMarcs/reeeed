@@ -16,13 +16,14 @@ struct ReaderElementView: View {
     var body: some View {
         switch element.type {
         case .heading(let text, let level):
-            Text(text)
+            Text(parseAttributedText(text))
                 .font(headingFont(for: level))
                 .fontWeight(.bold)
                 .lineLimit(nil)
                 .padding(.vertical, 4)
                 
         case .paragraph(let text):
+            // text may still include <p> wrapper and inline anchors – parse into attributed string
             Text(parseAttributedText(text))
                 .padding(.vertical, 2)
                 
@@ -58,8 +59,8 @@ struct ReaderElementView: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .top, spacing: 8) {
                         Text("•")
-                        
-                        Text(item)
+                        // Each list item may contain inline HTML (links, emphasis)
+                        Text(parseAttributedText(item))
                             .lineLimit(nil)
                     }
                 }
@@ -91,36 +92,69 @@ struct ReaderElementView: View {
     }
     
     private func parseAttributedText(_ text: String) -> AttributedString {
-        var attributedString = AttributedString(text)
-        
-        do {
-            let linkRegex = try NSRegularExpression(pattern: "<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']*)[\"'][^>]*>([^<]*)</a>", options: [])
-            let matches = linkRegex.matches(in: text, options: [], range: NSRange(location: 0, length: text.count))
-            
-            for match in matches.reversed() {
-                if let urlRange = Range(match.range(at: 1), in: text),
-                   let textRange = Range(match.range(at: 2), in: text),
-                   let fullRange = Range(match.range, in: text) {
-                    
-                    let url = String(text[urlRange])
-                    let linkText = String(text[textRange])
-                    
-                    if let attributedRange = Range(fullRange, in: attributedString) {
-                        attributedString.removeSubrange(attributedRange)
-                        var linkAttributedString = AttributedString(linkText)
-                        linkAttributedString.foregroundColor = .accentColor
-                        linkAttributedString.underlineStyle = .single
-                        if let linkURL = URL(string: url) {
-                            linkAttributedString.link = linkURL
-                        }
-                        attributedString.insert(linkAttributedString, at: attributedRange.lowerBound)
-                    }
-                }
-            }
-        } catch {
-            print("Failed to parse links: \(error)")
+        // Remove common outer wrappers (<p>...</p>) while preserving inner HTML
+        var working = text
+            .replacingOccurrences(of: "^<p[^>]*>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "</p>$", with: "", options: .regularExpression)
+
+        // Replace <br> variants with newline to keep structure
+        working = working.replacingOccurrences(of: "<br ?/?>", with: "\n", options: .regularExpression)
+
+        // We'll iteratively detect anchors and build an AttributedString
+        var attributed = AttributedString("")
+        var cursor = working.startIndex
+
+        let pattern = "<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']*)[\"'][^>]*>(.*?)</a>"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
+            return AttributedString(working.htmlStripped())
         }
-        
-        return attributedString
+
+        let nsWorking = working as NSString
+        let matches = regex.matches(in: working, options: [], range: NSRange(location: 0, length: nsWorking.length))
+
+        func appendPlain(_ substring: Substring) {
+            if substring.isEmpty { return }
+            let plain = String(substring).htmlStripped()
+            if !plain.isEmpty { attributed.append(AttributedString(plain)) }
+        }
+
+        for match in matches {
+            guard match.numberOfRanges >= 3,
+                  let hrefRange = Range(match.range(at: 1), in: working),
+                  let innerRange = Range(match.range(at: 2), in: working),
+                  let fullRange = Range(match.range(at: 0), in: working) else { continue }
+
+            let before = working[cursor..<fullRange.lowerBound]
+            appendPlain(before)
+
+            let urlString = String(working[hrefRange])
+            let linkInnerRaw = String(working[innerRange])
+            let linkInner = linkInnerRaw.htmlStripped()
+            var linkAttr = AttributedString(linkInner)
+            linkAttr.foregroundColor = .accentColor
+            linkAttr.underlineStyle = .single
+            if let parsedURL = URL(string: urlString) { linkAttr.link = parsedURL }
+            attributed.append(linkAttr)
+
+            cursor = fullRange.upperBound
+        }
+
+        if cursor < working.endIndex {
+            appendPlain(working[cursor..<working.endIndex])
+        }
+
+        return attributed
+    }
+}
+
+private extension String {
+    func htmlStripped() -> String {
+        // Very lightweight stripping of residual tags; not a full HTML parser but fine for inline tags
+        self.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
     }
 }
