@@ -1,7 +1,6 @@
 import SwiftUI
 import Fuzi
 import SwiftUI
-import CachedAsyncImage
 
 struct ArticleElement {
     enum ElementType {
@@ -18,8 +17,9 @@ struct ArticleElement {
     let type: ElementType
 }
 
-struct NativeReaderView: View {
+struct NativeReaderView<ImageRenderer: View>: View {
     let readableDoc: ReadableDoc
+    let imageRenderer: ((URL) -> ImageRenderer)?
     
     @State private var elements: [ArticleElement] = []
     
@@ -27,9 +27,21 @@ struct NativeReaderView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 if readableDoc.insertHeroImage, let heroURL = readableDoc.metadata.heroImage {
-                    CachedAsyncImage(url: heroURL, targetSize: .init(width: 600, height: 450))
+                    if let imageRenderer = imageRenderer {
+                        imageRenderer(heroURL)
+                            .aspectRatio(contentMode: .fit)
+                            .cornerRadius(8)
+                    } else {
+                        AsyncImage(url: heroURL) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } placeholder: {
+                            ProgressView()
+                        }
                         .aspectRatio(contentMode: .fit)
                         .cornerRadius(8)
+                    }
                 }
                 
                 if let title = readableDoc.title {
@@ -64,7 +76,7 @@ struct NativeReaderView: View {
                 .font(.headline)
                 
                 ForEach(Array(elements.enumerated()), id: \.offset) { index, element in
-                    ReaderElementView(element: element)
+                    ReaderElementView<ImageRenderer>(element: element, imageRenderer: imageRenderer)
                         .lineSpacing(5)
                 }
             }

@@ -1,12 +1,14 @@
 import SwiftUI
 
-public struct ReeeederView: View {
+public struct ReeeederView<ImageRenderer: View>: View {
     var url: URL
     var onExtractedText: ((String?) -> Void)?
+    var imageRenderer: ((URL) -> ImageRenderer)?
     
-    public init(url: URL, onExtractedText: ((String?) -> Void)? = nil) {
+    public init(url: URL, onExtractedText: ((String?) -> Void)? = nil, imageRenderer: ((URL) -> ImageRenderer)? = nil) {
         self.url = url
         self.onExtractedText = onExtractedText
+        self.imageRenderer = imageRenderer
     }
     
     enum Status: Equatable {
@@ -64,7 +66,7 @@ public struct ReeeederView: View {
             case .failedToExtractContent:
                 FallBackWebView(url: url)
             case .extractedContent(let readableDoc):
-                NativeReaderView(readableDoc: readableDoc)
+                NativeReaderView(readableDoc: readableDoc, imageRenderer: imageRenderer)
             }
         }
     }

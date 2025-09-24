@@ -6,12 +6,12 @@
 //
 
 import SwiftUI
-import CachedAsyncImage
 
-struct ReaderElementView: View {
+struct ReaderElementView<ImageRenderer: View>: View {
     @Environment(\.openURL) var openURL
     
     let element: ArticleElement
+    let imageRenderer: ((URL) -> ImageRenderer)?
     
     var body: some View {
         switch element.type {
@@ -28,10 +28,25 @@ struct ReaderElementView: View {
                 .padding(.vertical, 2)
                 
         case .image(let url, let alt):
-            CachedAsyncImage(url: URL(string: url), targetSize: .init(width: 600, height: 450))
-                .aspectRatio(contentMode: .fit)
-                .cornerRadius(5)
-                .padding(.vertical, 4)
+            if let imageURL = URL(string: url) {
+                if let imageRenderer = imageRenderer {
+                    imageRenderer(imageURL)
+                        .aspectRatio(contentMode: .fit)
+                        .cornerRadius(5)
+                        .padding(.vertical, 4)
+                } else {
+                    AsyncImage(url: imageURL) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } placeholder: {
+                        ProgressView()
+                    }
+                    .aspectRatio(contentMode: .fit)
+                    .cornerRadius(5)
+                    .padding(.vertical, 4)
+                }
+            }
             
         case .blockquote(let text):
             HStack(alignment: .top, spacing: 12) {
