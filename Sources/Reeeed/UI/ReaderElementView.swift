@@ -62,12 +62,17 @@ struct ReaderElementView<ImageRenderer: View>: View {
             .padding(.vertical, 8)
             
         case .code(let text):
-            Text(text)
-                .font(.system(.body, design: .monospaced))
-                .padding(12)
-                .background(Color.gray.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .padding(.vertical, 4)
+            // Render code blocks in a horizontal scroll view; avoid wrapping
+            ScrollView(.horizontal, showsIndicators: true) {
+                Text(text)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(12)
+            }
+            .background(Color.gray.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(.vertical, 4)
                 
         case .list(let items):
             VStack(alignment: .leading, spacing: 4) {
@@ -115,17 +120,16 @@ struct ReaderElementView<ImageRenderer: View>: View {
         // Replace <br> variants with newline to keep structure
         working = working.replacingOccurrences(of: "<br ?/?>", with: "\n", options: .regularExpression)
 
-        // We'll iteratively detect anchors and build an AttributedString
+        // Iteratively detect <a href=...>...</a> and <code>...</code> and build AttributedString
         var attributed = AttributedString("")
         var cursor = working.startIndex
 
-        let pattern = "<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']*)[\"'][^>]*>(.*?)</a>"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
+        let linkPattern = "<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']*)[\"'][^>]*>(.*?)</a>"
+        let codePattern = "<code[^>]*>(.*?)</code>"
+        guard let linkRegex = try? NSRegularExpression(pattern: linkPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
+              let codeRegex = try? NSRegularExpression(pattern: codePattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
             return AttributedString(working.htmlStripped())
         }
-
-        let nsWorking = working as NSString
-        let matches = regex.matches(in: working, options: [], range: NSRange(location: 0, length: nsWorking.length))
 
         func appendPlain(_ substring: Substring) {
             if substring.isEmpty { return }
@@ -133,29 +137,46 @@ struct ReaderElementView<ImageRenderer: View>: View {
             if !plain.isEmpty { attributed.append(AttributedString(plain)) }
         }
 
-        for match in matches {
-            guard match.numberOfRanges >= 3,
-                  let hrefRange = Range(match.range(at: 1), in: working),
-                  let innerRange = Range(match.range(at: 2), in: working),
-                  let fullRange = Range(match.range(at: 0), in: working) else { continue }
+        let ns = working as NSString
+        while cursor < working.endIndex {
+            let searchRange = NSRange(cursor..<working.endIndex, in: working)
+            let linkMatch = linkRegex.firstMatch(in: working, options: [], range: searchRange)
+            let codeMatch = codeRegex.firstMatch(in: working, options: [], range: searchRange)
 
+            func startLoc(_ m: NSTextCheckingResult?) -> Int { m?.range.location ?? Int.max }
+            let next = (startLoc(linkMatch) <= startLoc(codeMatch)) ? linkMatch : codeMatch
+
+            guard let match = next, let fullRange = Range(match.range(at: 0), in: working) else {
+                // No more tags we handle; append the rest as plain text
+                appendPlain(working[cursor..<working.endIndex])
+                break
+            }
+
+            // Append any text before the tag as plain
             let before = working[cursor..<fullRange.lowerBound]
             appendPlain(before)
 
-            let urlString = String(working[hrefRange])
-            let linkInnerRaw = String(working[innerRange])
-            let linkInner = linkInnerRaw.htmlStripped()
-            var linkAttr = AttributedString(linkInner)
-            linkAttr.foregroundColor = .accentColor
-            linkAttr.underlineStyle = .single
-            if let parsedURL = URL(string: urlString) { linkAttr.link = parsedURL }
-            attributed.append(linkAttr)
+            if match == linkMatch, match.numberOfRanges >= 3,
+               let hrefRange = Range(match.range(at: 1), in: working),
+               let innerRange = Range(match.range(at: 2), in: working) {
+                let urlString = String(working[hrefRange])
+                let linkInnerRaw = String(working[innerRange])
+                // Recursively parse the inside so inline code within links is handled
+                var innerAttr = parseAttributedText(linkInnerRaw)
+                innerAttr.foregroundColor = .accentColor
+                innerAttr.underlineStyle = .single
+                if let parsedURL = URL(string: urlString) { innerAttr.link = parsedURL }
+                attributed.append(innerAttr)
+            } else if match == codeMatch, match.numberOfRanges >= 2,
+                      let innerRange = Range(match.range(at: 1), in: working) {
+                let codeInnerRaw = String(working[innerRange])
+                let codeText = codeInnerRaw.htmlStripped()
+                var codeAttr = AttributedString(codeText)
+                codeAttr.inlinePresentationIntent = .code // render as monospaced inline code
+                attributed.append(codeAttr)
+            }
 
             cursor = fullRange.upperBound
-        }
-
-        if cursor < working.endIndex {
-            appendPlain(working[cursor..<working.endIndex])
         }
 
         return attributed

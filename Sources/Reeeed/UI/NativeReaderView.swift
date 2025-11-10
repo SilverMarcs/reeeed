@@ -139,10 +139,16 @@ struct NativeReaderView<ImageRenderer: View>: View {
                 elements.append(ArticleElement(type: .blockquote(text)))
             }
             
-        case "pre", "code":
-            let text = element.stringValue
-            if !text.isEmpty {
-                elements.append(ArticleElement(type: .code(text)))
+        case "pre":
+            // Treat only <pre> blocks as code blocks (not inline <code>)
+            var codeText = ""
+            if let codeChild = element.children.first(where: { $0.tag?.lowercased() == "code" }) {
+                codeText = codeChild.stringValue
+            } else {
+                codeText = element.stringValue
+            }
+            if !codeText.isEmpty {
+                elements.append(ArticleElement(type: .code(codeText)))
             }
             
         case "ul", "ol":
