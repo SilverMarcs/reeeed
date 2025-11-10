@@ -65,12 +65,12 @@ struct ReaderElementView<ImageRenderer: View>: View {
             // Render code blocks in a horizontal scroll view; avoid wrapping
             ScrollView(.horizontal, showsIndicators: true) {
                 Text(text)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(12)
             }
-            .background(Color.gray.opacity(0.1))
+            .background(.background.secondary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.vertical, 4)
                 
