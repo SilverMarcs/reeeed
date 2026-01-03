@@ -29,7 +29,11 @@ public struct ReeeederView<ImageRenderer: View>: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Open in Safari") {
-                            openURL(url)
+                            #if canImport(UIKit) && !os(watchOS)
+                                UIApplication.shared.open(url)
+                            #elseif canImport(AppKit)
+                                NSWorkspace.shared.open(url)
+                            #endif
                         }
                     } label: {
                         Label(
