@@ -112,10 +112,13 @@ struct ReaderElementView<ImageRenderer: View>: View {
     }
     
     private func parseAttributedText(_ text: String) -> AttributedString {
-        // Remove common outer wrappers (<p>...</p>) while preserving inner HTML
+        // Remove common outer wrappers (<li>...</li>, <p>...</p>) while preserving inner HTML
         var working = text
+            .replacingOccurrences(of: "^<li[^>]*>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "</li>$", with: "", options: .regularExpression)
             .replacingOccurrences(of: "^<p[^>]*>", with: "", options: .regularExpression)
             .replacingOccurrences(of: "</p>$", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Replace <br> variants with newline to keep structure
         working = working.replacingOccurrences(of: "<br ?/?>", with: "\n", options: .regularExpression)
@@ -128,7 +131,7 @@ struct ReaderElementView<ImageRenderer: View>: View {
         let codePattern = "<code[^>]*>(.*?)</code>"
         guard let linkRegex = try? NSRegularExpression(pattern: linkPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
               let codeRegex = try? NSRegularExpression(pattern: codePattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
-            return AttributedString(working.htmlStripped())
+            return AttributedString(working.htmlStripped()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         func appendPlain(_ substring: Substring) {
@@ -179,7 +182,7 @@ struct ReaderElementView<ImageRenderer: View>: View {
             cursor = fullRange.upperBound
         }
 
-        return attributed
+        return attributed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -192,5 +195,23 @@ private extension String {
             .replacingOccurrences(of: "&gt;", with: ">")
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
+    }
+}
+
+private extension AttributedString {
+    func trimmingCharacters(in characterSet: CharacterSet) -> AttributedString {
+        var trimmed = self
+        while let firstChar = trimmed.characters.first,
+              let unicodeScalar = firstChar.unicodeScalars.first,
+              characterSet.contains(unicodeScalar) {
+            trimmed.removeSubrange(trimmed.startIndex..<trimmed.index(afterCharacter: trimmed.startIndex))
+        }
+        while let lastChar = trimmed.characters.last,
+              let unicodeScalar = lastChar.unicodeScalars.first,
+              characterSet.contains(unicodeScalar) {
+            let lastIndex = trimmed.index(beforeCharacter: trimmed.endIndex)
+            trimmed.removeSubrange(lastIndex..<trimmed.endIndex)
+        }
+        return trimmed
     }
 }
